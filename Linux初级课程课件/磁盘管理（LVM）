@@ -1,0 +1,210 @@
+Object:LVM详细操作过程
+       RAID技术详解
+
+
+
+ 	逻辑卷创建：
+ 		1.准备物理设备（磁盘/分区）(fdisk)
+ 			#在虚拟机中添加俩块磁盘(/dev/sdb1,/dev/sdc1)
+ 		2.创建物理卷(PV)
+ 			[root@localhost ~]# pvcreate /dev/sdb1 /dev/sdc1
+			 Physical volume "/dev/sdb1" successfully created
+			 Physical volume "/dev/sdc1" successfully created
+			[root@localhost ~]# 
+
+ 		3.创建卷组(VG)
+ 			[root@localhost ~]# vgcreate -s 8M  mygroup /dev/sdb1 /dev/sdc1
+			  Volume group "mygroup" successfully created
+			[root@localhost ~]# 
+
+			注释：  -s  8M    设置PE块大小，默认为4M
+
+ 		3.创建逻辑卷（LV）
+ 		[root@localhost ~]# lvcreate -n mymate  -L 20G  mygroup
+		  Logical volume "mymate" created
+		[root@localhost ~]# 
+
+			注释： -n  mymate   逻辑卷名称
+				  -L  20G    将逻辑卷的大小直接确定为20G
+				  -l  500    将逻辑卷的大小设置为500个PE块 
+
+ 		4.创建文件系统（mkfs）
+ 			#二选一
+ 			[root@localhost ~]# mkfs -t ext4 /dev/mygroup/mymate
+			[root@localhost ~]# mkfs -t ext4 /dev/mapper/mygroup-mymate
+ 		5.进行挂载（mount）
+ 			创建挂载目录：
+ 				mkdir /mnt/class
+ 			一次性挂载：
+ 				mount /dev/mygroup/mymate  /mnt/class
+ 			永久性挂载(/etc/fstab)
+ 				/dev/mygroup/mymate  /mnt/class   ext4    defaults 0 0
+ 				mount -a
+ 			查看挂载：
+ 				df -hT
+ 				mount
+ 		6.验证逻辑卷可用性
+ 			[root@localhost Desktop]# cd /mnt/class/
+			[root@localhost class]# ls
+			lost+found
+			[root@localhost class]# echo 'wai mian shui zai ganma chaosi la '>> tongbao.file
+			[root@localhost class]# ls
+			lost+found  tongbao.file
+			[root@localhost class]# cat tongbao.file 
+			wai mian shui zai ganma chaosi la 
+			[root@localhost class]# 
+
+
+		7.查看逻辑卷：
+			#查看PV
+				[root@localhost ~]# pvdisplay /dev/sdc1 
+				  --- Physical volume ---
+				  PV Name               /dev/sdc1
+				  VG Name               mygroup
+				  PV Size               20.00 GiB / not usable 7.00 MiB
+				  Allocatable           yes 
+				  PE Size               8.00 MiB
+				  Total PE              2559
+				  Free PE               2558
+				  Allocated PE          1
+				  PV UUID               RzH0hE-Li4Q-xEcn-VCSm-8d5T-0eW9-ETiFk4
+				   
+				[root@localhost ~]# 
+			#查看VG:
+				[root@localhost ~]# vgdisplay mygroup 
+				  --- Volume group ---
+				  VG Name               mygroup
+				  System ID             
+				  Format                lvm2
+				  Metadata Areas        2
+				  Metadata Sequence No  2
+				  VG Access             read/write
+				  VG Status             resizable
+				  MAX LV                0
+				  Cur LV                1
+				  Open LV               1
+				  Max PV                0
+				  Cur PV                2
+				  Act PV                2
+				  VG Size               39.98 GiB
+				  PE Size               8.00 MiB
+				  Total PE              5118
+				  Alloc PE / Size       2560 / 20.00 GiB
+				  Free  PE / Size       2558 / 19.98 GiB
+				  VG UUID               XSZ4Du-UPOi-627c-kd13-fjay-mGml-s4TUGf
+				   
+				[root@localhost ~]# 
+			#查看LV：
+				[root@localhost ~]# lvdisplay /dev/mygroup/mymate
+				  --- Logical volume ---
+				  LV Path                /dev/mygroup/mymate
+				  LV Name                mymate
+				  VG Name                mygroup
+				  LV UUID                5ovQoJ-e3oH-lF3u-hAP3-sfAP-oWaC-I8B5zf
+				  LV Write Access        read/write
+				  LV Creation host, time localhost.localdomain, 2018-08-01 07:52:15 -0400
+				  LV Status              available
+				  # open                 1
+				  LV Size                20.00 GiB
+				  Current LE             2560
+				  Segments               2
+				  Allocation             inherit
+				  Read ahead sectors     auto
+				  - currently set to     256
+				  Block device           253:2
+				   
+				[root@localhost ~]# 
+
+
+
+		8.删除逻辑卷：
+			1.卸载文件系统
+				umount  /dev/class
+			2.删除逻辑卷
+				lvremove  /dev/mygroup/mymate
+			3.删除卷组
+				vgremove  mygroup
+			4.删除物理卷
+				pvremove   /dev/sdb1   /dev/sdc1
+
+	逻辑卷扩展：
+		扩展和缩减卷组：
+			拓展卷组：
+				准备需要扩展的pv
+				pvcreate /dev/sdd1
+   				vgextend group  /dev/sdd1
+   			缩减卷组：
+   				1.移动物理区段（在VG空间足够的情况下，将被移除的pv物理区域重新分配到VG中）（pvmove）
+   					pvmove  /dev/sdb1
+   				2.缩减卷组空间
+   					pvreduce  group   /dev/sdb1
+		扩展逻辑卷：
+			一：基于XFS文件系统的逻辑卷扩展
+				1.验证卷组是否有可用的空间
+					vgdisplay group
+					………………………………
+					Free  PE / Size       11518 / 44.99 GiB
+					………………………………
+				2.扩展逻辑卷
+					[root@localhost ~]# lvextend -L 20G  /dev/group/lvname
+				3.扩展文件系统
+					[root@localhost ~]# xfs_growfs /mnt/xfs_dir/
+				4.验证是否扩展成功：
+					df -hT
+			二：基于ext4文件系统的扩展
+				1.验证卷组是否有可用扩展空间
+					vgdisplay group
+						………………………………
+						Free  PE / Size       11518 / 44.99 GiB
+						………………………………
+				2.扩展逻辑卷
+					[root@localhost ~]# lvextend -L 10G /dev/group/BJTLXY 
+				3.扩展文件系统
+					[root@localhost ~]# resize2fs /dev/mapper/group-BJTLXY
+				4.验证是否扩展成功
+					df -hT
+
+
+			注意：
+				xfs_growfs 和 resize2fs 之间的主要区别是为识别文件系统而传递参数。
+				xfs_growfs 采用挂载点，resize2fs采用逻辑卷名称
+
+				扩展参数选择：
+					lvextend  -L  10G     将逻辑卷的大小正好调整为10G
+					lvextend  -L  +10G    将逻辑卷大小在原基础之上增加10G
+					lvextend  -l  1000    将逻辑卷的大小正好调整为1000个PE块大小
+					lvextend  -l  +1000   将逻辑卷大小在原基础之上增加1000个PE块
+					lvextend  -l  +50%FREE  向LV中添加VG中当前可用空间的50%
+
+
+
+
+	练习题：
+		根据下面的要求创建一个新的逻辑卷
+		逻辑卷命名为wshare，属于卷组wgroup，并且逻辑卷的大小为100个物理扩展单元
+		在wgroup卷组中的逻辑卷，其物理扩展单元的大小应为8MiB
+		使用ext4文件系统对新的逻辑卷进行格式化，逻辑卷应该在系统启动的时候自动挂载在/mnt/wshare目录下
+		创建分区
+		pvcreate /dev/sdb7
+		vgcreate -s  8M  wgroup  /dev/sdb7
+		lvcreate    -n   wshare   -l   100    wgroup
+		mkfs-t ext4   /dev/wgroup/wshare
+		mkdir  /mnt/wshare
+		vim     /etc/fstab
+		/dev/wgroup/wshare     /mnt/wshare     ext4     defaults     0 0
+
+
+
+		将逻辑卷home和其文件系统大小调整到300M。要确保文件系统中的内容保持完整。请注意：分区大小很少能够完全符合要求的大小，所以大小在270M和330M之间都是可以接受的
+		lvextend  -L  300M  /dev/卷组名字/逻辑卷组名字 
+		resize2fs     -p     /dev/卷组名字/逻辑卷组名字
+
+
+		在您的系统中添加一个大小为256MiB的swap分区。当您的系统启动时，swap分区应该可以自动挂载。不要移动或者修改其他已经存在于您的系统中的swap分区
+
+		fdisk  /dev/vdb
+		mkswap   /dev/vdb1
+		vim  /etc/fstab
+		/dev/vdb1/     swap     swap     defaults     0 0
+		swapon    -a
+		swapon    -s
