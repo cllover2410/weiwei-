@@ -50,14 +50,16 @@
 	#查看系统当前主机名   hostname
 		[root@localhost Desktop]# hostname
 		localhost.localdomain
-	#修改主机名并让他生效   hostnamectl set-hostname hostname
+	#修改主机名并让他生效   
+	```shell
+	hostnamectl set-hostname hostname
 	[root@localhost Desktop]# hostnamectl set-hostname BJTLXY
 	[root@localhost Desktop]# hostname
 	bjtlxy
 	[root@localhost Desktop]# su -
 	Last login: Fri Jun 29 08:07:42 EDT 2018 on pts/0
 	[root@bjtlxy ~]# 
-	
+	```
 	
 	
 	#关机操作
